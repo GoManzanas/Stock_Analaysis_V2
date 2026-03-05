@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Stub Extension",
+  "version": "0.1.0",
+  "description": "A Chrome extension scaffold — customize for your use case",
+  "permissions": ["storage"],
+  "background": {
+    "service_worker": "background/index.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/index.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/index.html"
+  }
+}
