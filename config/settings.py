@@ -34,6 +34,9 @@ SEC_USER_AGENT = "13F-Analyst research@example.com"
 # In practice, the 2023Q1 ZIP is the first with all actual-dollar values.
 VALUE_CUTOVER_QUARTER = "2023Q1"  # First quarter with actual dollar values
 
+# --- EODHD Exchange Symbol List ---
+EODHD_SYMBOL_EXCHANGES = ["US"]  # Future: add "OTC" for OTC-traded securities
+
 # --- Rate limiting ---
 EODHD_CALLS_PER_SECOND = 5
 SEC_CALLS_PER_SECOND = 8

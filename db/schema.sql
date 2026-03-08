@@ -61,6 +61,20 @@ CREATE TABLE IF NOT EXISTS securities (
     resolution_confidence REAL DEFAULT 0.0
 );
 
+CREATE TABLE IF NOT EXISTS exchange_symbols (
+    code TEXT NOT NULL,
+    name TEXT,
+    country TEXT,
+    exchange TEXT NOT NULL,
+    currency TEXT,
+    isin TEXT,
+    cusip9 TEXT,
+    type TEXT,
+    is_delisted INTEGER DEFAULT 0,
+    downloaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (code, exchange)
+);
+
 CREATE TABLE IF NOT EXISTS corporate_actions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker TEXT NOT NULL,
@@ -129,3 +143,5 @@ CREATE INDEX IF NOT EXISTS idx_securities_ticker ON securities(ticker);
 CREATE INDEX IF NOT EXISTS idx_corporate_actions_ticker ON corporate_actions(ticker);
 CREATE INDEX IF NOT EXISTS idx_scrape_jobs_type_target ON scrape_jobs(job_type, target);
 CREATE INDEX IF NOT EXISTS idx_audit_results_type ON audit_results(audit_type);
+CREATE INDEX IF NOT EXISTS idx_exchange_symbols_cusip9 ON exchange_symbols(cusip9);
+CREATE INDEX IF NOT EXISTS idx_exchange_symbols_isin ON exchange_symbols(isin);

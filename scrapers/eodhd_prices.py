@@ -183,3 +183,9 @@ class PriceScraper(BaseScraper):
                 f"[bold green]Price download complete.[/bold green] "
                 f"Tickers: {fetched}, Rows: {rows_inserted}"
             )
+
+            # Run price audit as sub-step
+            console.print("\n[bold]Running price audit...[/bold]")
+            from audit.price_auditor import run_price_audit
+
+            run_price_audit(self.conn)

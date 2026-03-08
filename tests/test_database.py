@@ -57,6 +57,7 @@ class TestSchemaInit:
             "audit_results",
             "benchmark_prices",
             "corporate_actions",
+            "exchange_symbols",
             "filers",
             "filings",
             "holdings",
@@ -69,7 +70,7 @@ class TestSchemaInit:
 
     def test_schema_version_recorded(self, db):
         row = db.execute("SELECT version FROM schema_version").fetchone()
-        assert row[0] == 1
+        assert row[0] == 2
 
     def test_idempotent_init(self, db_path):
         """Running init_db twice should not fail or duplicate data."""

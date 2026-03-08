@@ -9,7 +9,7 @@ from config.settings import DB_PATH
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 VIEWS_PATH = Path(__file__).parent / "views.sql"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:

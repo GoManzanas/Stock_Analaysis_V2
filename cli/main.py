@@ -39,7 +39,7 @@ def scrape_bulk(from_year: int, to_year: int):
 
 @cli.command("resolve")
 def resolve_cusips():
-    """Map CUSIPs to tickers via EODHD ID Mapping API."""
+    """Map CUSIPs to tickers via EODHD Exchange Symbol List + name search fallback."""
     from scrapers.eodhd_mapping import CusipResolver
 
     with CusipResolver() as resolver:
@@ -131,35 +131,31 @@ def pipeline(from_year: int, to_year: int):
     from scrapers.eodhd_corporate import CorporateActionsScraper
     from scrapers.eodhd_prices import PriceScraper
     from audit.holdings_auditor import run_holdings_audit
-    from audit.price_auditor import run_price_audit
     from audit.reconciler import run_reconciliation
 
-    console.print("[bold]Step 1/7: SEC Bulk Download[/bold]")
+    console.print("[bold]Step 1/6: SEC Bulk Download[/bold]")
     with SecBulkScraper() as scraper:
         scraper.run(from_year=from_year, to_year=to_year)
 
-    console.print("\n[bold]Step 2/7: CUSIP Resolution[/bold]")
+    console.print("\n[bold]Step 2/6: CUSIP Resolution (Bulk + Fallback)[/bold]")
     with CusipResolver() as resolver:
         resolver.run()
 
-    console.print("\n[bold]Step 3/7: Corporate Actions[/bold]")
-    with CorporateActionsScraper() as scraper:
-        scraper.run()
-
-    console.print("\n[bold]Step 4/7: Price Download[/bold]")
+    console.print("\n[bold]Step 3/6: Price Download + Price Audit[/bold]")
     with PriceScraper() as scraper:
         scraper.run()
 
-    console.print("\n[bold]Step 5/7: Holdings Audit[/bold]")
+    console.print("\n[bold]Step 4/6: Corporate Actions[/bold]")
+    with CorporateActionsScraper() as scraper:
+        scraper.run()
+
+    console.print("\n[bold]Step 5/6: Holdings Audit[/bold]")
     init_db()
     conn = get_connection()
     try:
         run_holdings_audit(conn)
 
-        console.print("\n[bold]Step 6/7: Price Audit[/bold]")
-        run_price_audit(conn)
-
-        console.print("\n[bold]Step 7/7: Reconciliation[/bold]")
+        console.print("\n[bold]Step 6/6: Reconciliation[/bold]")
         run_reconciliation(conn)
     finally:
         conn.close()
@@ -184,6 +180,7 @@ def status(detail: str | None):
         table.add_row("Filers", str(get_table_count(conn, "filers")))
         table.add_row("Filings", str(get_table_count(conn, "filings")))
         table.add_row("Holdings", str(get_table_count(conn, "holdings")))
+        table.add_row("Exchange Symbols", str(get_table_count(conn, "exchange_symbols")))
         table.add_row("Securities (total)", str(get_table_count(conn, "securities")))
 
         resolved = conn.execute(

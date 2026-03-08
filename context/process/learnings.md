@@ -19,7 +19,9 @@
 
 - EOD Historical Data plan ($19.99/mo) covers: EOD prices, splits, dividends, bulk API, ID Mapping, Search
 - Daily limit: ~100K API calls
-- ID Mapping API: `GET /api/id-mapping?filter[cusip]={CUSIP}` — maps CUSIP to ticker
+- ID Mapping API: `GET /api/id-mapping?filter[cusip]={CUSIP}` — maps CUSIP to ticker (slow: 1 call per CUSIP)
+- **Exchange Symbol List API**: `GET /api/exchange-symbol-list/{EXCHANGE}` returns all tickers with ISINs in 1 call. Use `delisted=1` param for delisted tickers. This is the preferred bulk approach for CUSIP matching
+- **ISIN→CUSIP extraction**: ISIN format is 2-char country code + 9-digit CUSIP + 1 check digit. `ISIN[2:11]` gives the 9-digit CUSIP
 - SEC uses 9-digit CUSIPs (6 issuer + 2 issue + 1 check). EODHD may expect 6-digit — try both
 - The `adjusted_close` field in EOD API response (not `adj_close`) is pre-adjusted for splits + dividends
 - Search API prefers US exchange matches when multiple results returned
@@ -30,3 +32,4 @@
 - Use `INSERT OR IGNORE` for idempotent bulk inserts
 - `executemany` with WAL mode handles millions of rows efficiently
 - `AUTOINCREMENT` creates an internal `sqlite_sequence` table — exclude it when listing user tables
+- `UPDATE ... FROM` syntax (SQLite 3.33+) enables efficient bulk matching via SQL JOIN. Python 3.12+ bundles SQLite 3.41+
