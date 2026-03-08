@@ -8,9 +8,6 @@ from db.database import query_all
 
 logger = logging.getLogger(__name__)
 
-# Metrics where ascending sort is "better" (lower = better)
-_ASCENDING_METRICS = {"sp500_correlation", "max_drawdown", "avg_turnover"}
-
 # All supported filter keys and the metric they map to
 _FILTER_TO_METRIC = {
     "min_annualized_return": "annualized_return",
