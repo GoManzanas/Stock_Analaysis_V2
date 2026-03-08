@@ -2,13 +2,13 @@
 
 ## Context
 
-The current CUSIP resolution (pipeline step 2) makes 152K+ individual API calls to EODHD's `/api/id-mapping` endpoint — one per unresolved CUSIP. At 5 calls/sec, this takes ~8.5 hours. The fix: download EODHD's full exchange symbol list (1 API call), extract CUSIPs from ISINs, and match locally in SQLite. Unmatched CUSIPs still get the name-search fallback, but applied to a much smaller residual set.
+The current CUSIP resolution (pipeline step 2) makes 152K+ individual API calls to EODHD's `/api/id-mapping` endpoint — one per unresolved CUSIP. At 5 calls/sec, this takes ~8.5 hours. The fix: download EODHD's full exchange symbol list (1 API call), extract CUSIPs from ISINs, and match locally in SQLite.
 
 ## New Pipeline Order
 
 ```
 Step 1/6: SEC Bulk Download              (unchanged)
-Step 2/6: CUSIP Resolution               (rewritten: bulk symbol list + local match + name-search fallback)
+Step 2/6: CUSIP Resolution               (rewritten: bulk symbol list + local match)
 Step 3/6: Price Download + Price Audit    (price audit runs as sub-step after download)
 Step 4/6: Corporate Actions              (unchanged, renumbered)
 Step 5/6: Holdings Audit                 (unchanged, renumbered)
@@ -28,11 +28,6 @@ Step 6/6: Reconciliation                 (unchanged, renumbered)
 - Single `UPDATE ... FROM` joining `securities` against `exchange_symbols` on `cusip = cusip9`
 - Handle multiple tickers per CUSIP via `ROW_NUMBER()` tie-breaking (prefer US exchange, prefer Common Stock)
 - Set `resolution_source = 'bulk_symbol_list'`, `resolution_confidence = 0.95`
-
-### Phase 3: Name-search fallback
-- Query remaining `WHERE ticker IS NULL AND resolution_source IS NULL`
-- Reuse existing `resolve_cusip_via_search()` — same batch/SIGINT pattern
-- This set should be much smaller (thousands vs 152K)
 
 ### Price audit integration
 - After `PriceScraper.run()` completes successfully, call `run_price_audit(conn)` inline
@@ -66,10 +61,9 @@ EODHD_SYMBOL_EXCHANGES = ["US"]  # Future: add "OTC"
 ### `scrapers/eodhd_mapping.py` — Major rewrite
 - Add `download_exchange_symbols(exchange)` — single API call
 - Add `extract_cusip_from_isin(isin)` — `ISIN[2:11]` for US ISINs
-- Rewrite `CusipResolver.run()` into 3 phases with separate job targets:
+- Rewrite `CusipResolver.run()` into 2 phases with separate job targets:
   - `symbol_download:US` — Phase 1 (download)
   - `bulk_match` — Phase 2 (SQL JOIN)
-  - `name_search_fallback` — Phase 3 (API fallback for residual)
 - Remove `resolve_cusip_via_mapping()` from the main code path (keep function for backward compat)
 
 ### `scrapers/eodhd_prices.py` — Add price audit sub-step
@@ -84,7 +78,7 @@ EODHD_SYMBOL_EXCHANGES = ["US"]  # Future: add "OTC"
 ### `tests/test_eodhd_mapping.py` — Update tests
 - Add tests for `extract_cusip_from_isin()`
 - Add tests for bulk match phase (insert symbols, run resolver, verify match)
-- Update integration test for 3-phase flow
+- Update integration test for 2-phase flow
 
 ## Key Design Decisions
 
@@ -101,7 +95,6 @@ EODHD_SYMBOL_EXCHANGES = ["US"]  # Future: add "OTC"
 1. Run `python -m cli.main resolve` and confirm:
    - Phase 1 downloads ~70K+ symbols (active + delisted) in 2 API calls
    - Phase 2 bulk-matches thousands of CUSIPs in seconds via SQL
-   - Phase 3 name-search runs only on the residual (should be small)
 2. Run `python -m cli.main download prices` and confirm price audit runs after download
 3. Run `python -m cli.main pipeline` and confirm 6-step flow works end-to-end
 4. Run `python -m cli.main status --detail cusips` and confirm `bulk_symbol_list` appears as a resolution source

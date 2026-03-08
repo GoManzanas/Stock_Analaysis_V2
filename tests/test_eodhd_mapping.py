@@ -1,4 +1,4 @@
-"""Tests for CUSIP to ticker resolution via EODHD Exchange Symbol List + search fallback."""
+"""Tests for CUSIP to ticker resolution via EODHD Exchange Symbol List."""
 
 from unittest.mock import patch, MagicMock
 
@@ -389,80 +389,11 @@ class TestCusipResolverPhase2:
         conn.close()
 
 
-class TestCusipResolverPhase3:
-    @patch("scrapers.eodhd_mapping.resolve_cusip_via_search")
-    @patch("scrapers.eodhd_mapping.time.sleep")
-    def test_name_search_fallback(self, mock_sleep, mock_search, db_path):
-        """Phase 3 should search by name for CUSIPs not matched in Phase 2."""
-        init_db(db_path)
-        conn = get_connection(db_path)
-        # Unresolved CUSIP with no resolution_source (not yet attempted)
-        conn.execute("INSERT INTO securities (cusip, name) VALUES (?, ?)", ("000000000", "WEIRD CORP"))
-        conn.commit()
-        conn.close()
-
-        mock_search.return_value = {
-            "Code": "WRDC", "Exchange": "US", "Name": "Weird Corp", "Type": "Common Stock"
-        }
-
-        with CusipResolver(db_path) as resolver:
-            resolver._phase3_name_search_fallback(batch_size=10)
-
-        conn = get_connection(db_path)
-        row = query_one(conn, "SELECT * FROM securities WHERE cusip = ?", ("000000000",))
-        assert row["ticker"] == "WRDC"
-        assert row["resolution_source"] == "name_search"
-        assert row["resolution_confidence"] == 0.7
-        conn.close()
-
-    @patch("scrapers.eodhd_mapping.resolve_cusip_via_search")
-    @patch("scrapers.eodhd_mapping.time.sleep")
-    def test_unresolved_marked(self, mock_sleep, mock_search, db_path):
-        """CUSIPs that fail name search should be marked unresolved."""
-        init_db(db_path)
-        conn = get_connection(db_path)
-        conn.execute("INSERT INTO securities (cusip, name) VALUES (?, ?)", ("000000000", "UNKNOWN"))
-        conn.commit()
-        conn.close()
-
-        mock_search.return_value = None
-
-        with CusipResolver(db_path) as resolver:
-            resolver._phase3_name_search_fallback(batch_size=10)
-
-        conn = get_connection(db_path)
-        row = query_one(conn, "SELECT * FROM securities WHERE cusip = ?", ("000000000",))
-        assert row["ticker"] is None
-        assert row["resolution_source"] == "unresolved"
-        assert row["resolution_confidence"] == 0.0
-        conn.close()
-
-    @patch("scrapers.eodhd_mapping.resolve_cusip_via_search")
-    @patch("scrapers.eodhd_mapping.time.sleep")
-    def test_skips_already_attempted(self, mock_sleep, mock_search, db_path):
-        """Phase 3 should skip CUSIPs that already have a resolution_source."""
-        init_db(db_path)
-        conn = get_connection(db_path)
-        # Already marked as unresolved from a previous run
-        conn.execute(
-            "INSERT INTO securities (cusip, name, resolution_source) VALUES (?, ?, ?)",
-            ("000000000", "UNKNOWN", "unresolved"),
-        )
-        conn.commit()
-        conn.close()
-
-        with CusipResolver(db_path) as resolver:
-            resolver._phase3_name_search_fallback(batch_size=10)
-
-        mock_search.assert_not_called()
-
-
 class TestCusipResolverFullFlow:
     @patch("scrapers.eodhd_mapping.download_exchange_symbols")
-    @patch("scrapers.eodhd_mapping.resolve_cusip_via_search")
     @patch("scrapers.eodhd_mapping.time.sleep")
-    def test_full_3_phase_flow(self, mock_sleep, mock_search, mock_download, db_path):
-        """Full resolver should match via symbol list, then fall back to name search."""
+    def test_full_2_phase_flow(self, mock_sleep, mock_download, db_path):
+        """Full resolver should match via symbol list; unmatched CUSIPs remain unresolved."""
         init_db(db_path)
         conn = get_connection(db_path)
         # CUSIP that matches AAPL via ISIN
@@ -480,13 +411,8 @@ class TestCusipResolverFullFlow:
             [],  # delisted
         ]
 
-        # Phase 3: name search resolves MYSTERY CORP
-        mock_search.return_value = {
-            "Code": "MYST", "Exchange": "US", "Name": "Mystery Corp", "Type": "Common Stock"
-        }
-
         with CusipResolver(db_path) as resolver:
-            resolver.run(batch_size=10)
+            resolver.run()
 
         conn = get_connection(db_path)
 
@@ -495,9 +421,8 @@ class TestCusipResolverFullFlow:
         assert aapl["ticker"] == "AAPL"
         assert aapl["resolution_source"] == "bulk_symbol_list"
 
-        # MYSTERY matched via name search fallback
+        # Unmatched CUSIP remains unresolved
         myst = query_one(conn, "SELECT * FROM securities WHERE cusip = ?", ("999999999",))
-        assert myst["ticker"] == "MYST"
-        assert myst["resolution_source"] == "name_search"
+        assert myst["ticker"] is None
 
         conn.close()

@@ -15,7 +15,7 @@ Product and architectural decisions. Log non-obvious choices here.
 
 **Context:** CUSIP resolution made 152K+ individual API calls (1 per CUSIP) to EODHD's ID Mapping API, taking ~8.5 hours at 5 calls/sec.
 
-**Decision:** Replace per-CUSIP API calls with EODHD Exchange Symbol List API (2 calls: active + delisted tickers), extract CUSIPs from ISINs, match locally via SQL JOIN. Keep name-search fallback for unmatched CUSIPs.
+**Decision:** Replace per-CUSIP API calls with EODHD Exchange Symbol List API (2 calls: active + delisted tickers), extract CUSIPs from ISINs, match locally via SQL JOIN. Unmatched CUSIPs remain unresolved (no name-search fallback).
 
 **Alternatives considered:**
 - Keep per-CUSIP approach with higher parallelism (still 152K calls, rate-limited)

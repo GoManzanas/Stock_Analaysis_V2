@@ -1,8 +1,7 @@
-"""CUSIP to ticker resolver using EODHD Exchange Symbol List + name search fallback.
+"""CUSIP to ticker resolver using EODHD Exchange Symbol List.
 
 Phase 1: Download exchange symbol list (active + delisted) — 2 API calls
 Phase 2: Bulk CUSIP matching via SQL JOIN on ISIN-derived CUSIPs
-Phase 3: Name-search fallback for remaining unmatched CUSIPs
 """
 
 import logging
@@ -166,21 +165,17 @@ def _extract_ticker_info(result: dict) -> dict:
 
 
 class CusipResolver(BaseScraper):
-    """Resolves CUSIPs to tickers using EODHD Exchange Symbol List + name search fallback."""
+    """Resolves CUSIPs to tickers using EODHD Exchange Symbol List."""
 
     job_type = "cusip_resolve"
 
-    def run(self, batch_size: int = 100, **kwargs):
-        """Resolve all unresolved CUSIPs in 3 phases."""
+    def run(self, **kwargs):
+        """Resolve all unresolved CUSIPs in 2 phases."""
         self._phase1_download_symbols()
         if self.is_interrupted:
             return
 
         self._phase2_bulk_match()
-        if self.is_interrupted:
-            return
-
-        self._phase3_name_search_fallback(batch_size)
 
     def _phase1_download_symbols(self):
         """Phase 1: Download exchange symbol list (active + delisted)."""
@@ -373,110 +368,3 @@ class CusipResolver(BaseScraper):
             f"{remaining} still unresolved[/green]"
         )
 
-    def _phase3_name_search_fallback(self, batch_size: int = 100):
-        """Phase 3: Name-search fallback for remaining unmatched CUSIPs."""
-        target = "name_search_fallback"
-        job_id, progress = self.get_or_create_job(target)
-        job = self.get_job(target)
-        if job and job["status"] == "completed":
-            console.print("[dim]Phase 3: Name search fallback already completed.[/dim]")
-            return
-
-        # Only search CUSIPs that haven't been resolved or attempted
-        unresolved = query_all(
-            self.conn,
-            """SELECT cusip, name FROM securities
-               WHERE ticker IS NULL AND resolution_source IS NULL
-               ORDER BY cusip""",
-        )
-
-        if not unresolved:
-            console.print("[green]Phase 3: No remaining CUSIPs to search.[/green]")
-            self.complete_job(job_id)
-            return
-
-        total = len(unresolved)
-        console.print(
-            f"[bold]Phase 3: Name-search fallback for {total} unmatched CUSIPs...[/bold]"
-        )
-
-        # Restore progress from previous run
-        resolved_set = set()
-        if progress and "resolved" in progress:
-            resolved_set = set(progress["resolved"])
-
-        resolved_count = 0
-        failed_count = 0
-        now = datetime.now(timezone.utc).isoformat()
-
-        for i, row in enumerate(unresolved):
-            if self.is_interrupted:
-                self.interrupt_job(job_id, {
-                    "resolved": list(resolved_set),
-                    "resolved_count": resolved_count,
-                    "failed_count": failed_count,
-                })
-                break
-
-            cusip = row["cusip"]
-            issuer_name = row["name"] or ""
-
-            if cusip in resolved_set:
-                continue
-
-            result = resolve_cusip_via_search(issuer_name)
-
-            if result is not None:
-                info = _extract_ticker_info(result)
-                self.conn.execute(
-                    """UPDATE securities SET
-                        ticker = ?, eodhd_symbol = ?, name = COALESCE(?, name),
-                        security_type = ?, exchange = ?, is_active = 1,
-                        resolved_at = ?, resolution_source = 'name_search',
-                        resolution_confidence = 0.7
-                    WHERE cusip = ?""",
-                    (
-                        info["ticker"], info["eodhd_symbol"], info["name"],
-                        info["security_type"], info["exchange"],
-                        now, cusip,
-                    ),
-                )
-                resolved_count += 1
-            else:
-                self.conn.execute(
-                    """UPDATE securities SET
-                        resolution_source = 'unresolved',
-                        resolution_confidence = 0.0,
-                        resolved_at = ?
-                    WHERE cusip = ?""",
-                    (now, cusip),
-                )
-                failed_count += 1
-
-            resolved_set.add(cusip)
-
-            # Commit and report progress every batch_size
-            if (i + 1) % batch_size == 0:
-                self.conn.commit()
-                self.update_progress(job_id, {
-                    "resolved": list(resolved_set),
-                    "resolved_count": resolved_count,
-                    "failed_count": failed_count,
-                })
-                self.conn.commit()
-                console.print(
-                    f"  [{resolved_count + failed_count}/{total}] "
-                    f"resolved: {resolved_count}, failed: {failed_count}"
-                )
-
-            time.sleep(_DELAY)
-
-        # Final commit
-        self.conn.commit()
-
-        if not self.is_interrupted:
-            self.complete_job(job_id)
-            console.print(
-                f"[green]Phase 3 complete: "
-                f"Resolved: {resolved_count}, Unresolved: {failed_count}, Total: {total}[/green]"
-            )
