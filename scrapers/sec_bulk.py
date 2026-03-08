@@ -131,16 +131,27 @@ def _is_value_in_thousands(quarter_key: str) -> bool:
     return (q_year, q_num) < (cutover_year, cutover_q)
 
 
+def _find_in_zip(zip_file: zipfile.ZipFile, filename: str) -> str | None:
+    """Find a file in a ZIP, checking root first then subdirectories."""
+    if filename in zip_file.namelist():
+        return filename
+    # Some SEC ZIPs nest files in a subdirectory
+    for name in zip_file.namelist():
+        if name.endswith("/" + filename):
+            return name
+    return None
+
+
 def _read_tsv(zip_file: zipfile.ZipFile, filename: str) -> list[dict]:
     """Read a TSV file from a ZIP and return list of dicts."""
-    try:
-        with zip_file.open(filename) as f:
-            text = io.TextIOWrapper(f, encoding="utf-8", errors="replace")
-            reader = csv.DictReader(text, delimiter="\t")
-            return list(reader)
-    except KeyError:
+    path = _find_in_zip(zip_file, filename)
+    if path is None:
         log.warning("File not found in ZIP: %s", filename)
         return []
+    with zip_file.open(path) as f:
+        text = io.TextIOWrapper(f, encoding="utf-8", errors="replace")
+        reader = csv.DictReader(text, delimiter="\t")
+        return list(reader)
 
 
 def parse_quarter_zip(zip_path: Path, quarter_key: str, conn) -> dict:

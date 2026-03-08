@@ -9,6 +9,7 @@
 - The summary page file is `SUMMARYPAGE.tsv` (no underscore)
 - Value cutover: ZIPs from 2023Q1 onward have values in actual dollars. 2022Q4 and earlier in thousands. The boundary is by filing date (Jan 3, 2023), but in practice all filings in 2023Q1 ZIP are post-cutover
 - Each ZIP also contains: `FORM13F_metadata.json` and `FORM13F_readme.htm`
+- **ZIP internal structure varies**: Some ZIPs (e.g., 2025Q3) nest TSV files in a subdirectory (`01JUN2025-31AUG2025_form13f/SUBMISSION.tsv`) instead of at the root. The `_find_in_zip()` helper handles both layouts
 - SEC dates use format `DD-MMM-YYYY` (e.g., `30-SEP-2023`)
 - 13F-HR/A amendments can be RESTATEMENT (replace) or NEW HOLDINGS (append)
 - SEC requires a `User-Agent` header with contact info for all requests
