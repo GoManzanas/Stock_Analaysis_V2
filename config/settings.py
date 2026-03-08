@@ -37,3 +37,7 @@ VALUE_CUTOVER_QUARTER = "2023Q1"  # First quarter with actual dollar values
 # --- Rate limiting ---
 EODHD_CALLS_PER_SECOND = 5
 SEC_CALLS_PER_SECOND = 8
+
+# --- Analytics ---
+RISK_FREE_RATE_QUARTERLY = 0.01  # ~4% annualized
+MIN_QUARTERS_FOR_METRICS = 4     # Minimum quarters to compute CAGR, Sharpe, etc.

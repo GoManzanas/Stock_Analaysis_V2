@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS audit_results (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_holdings_cusip ON holdings(cusip);
+CREATE INDEX IF NOT EXISTS idx_holdings_filing_cusip ON holdings(filing_id, cusip);
 CREATE INDEX IF NOT EXISTS idx_holdings_filing_id ON holdings(filing_id);
 CREATE INDEX IF NOT EXISTS idx_filings_cik_report ON filings(cik, report_date);
 CREATE INDEX IF NOT EXISTS idx_filings_quarter ON filings(report_year, report_quarter);
