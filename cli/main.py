@@ -1,5 +1,7 @@
 """Click CLI entry point for 13F Fund Analyst."""
 
+import logging
+
 import click
 from rich.console import Console
 from rich.table import Table
@@ -11,9 +13,14 @@ console = Console()
 
 
 @click.group()
-def cli():
+@click.option("-v", "--verbose", is_flag=True, help="Enable verbose logging (WARNING+)")
+@click.option("--debug", is_flag=True, help="Enable debug logging (all messages)")
+def cli(verbose, debug):
     """13F Fund Analyst — SEC filing data pipeline."""
-    pass
+    if debug:
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s: %(message)s")
+    elif verbose:
+        logging.basicConfig(level=logging.WARNING, format="%(name)s: %(message)s")
 
 
 # --- Scrape commands ---

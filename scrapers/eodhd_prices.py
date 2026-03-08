@@ -37,6 +37,9 @@ def fetch_eod_prices(ticker: str, exchange: str = "US", from_date: str = "2010-0
             data = resp.json()
             if isinstance(data, list):
                 return data
+            log.warning("Unexpected response type for %s.%s: %s", ticker, exchange, type(data).__name__)
+        else:
+            log.warning("HTTP %d for %s.%s: %s", resp.status_code, ticker, exchange, resp.text[:200])
     except Exception as e:
         log.warning("Price fetch error for %s.%s: %s", ticker, exchange, e)
     return []
@@ -73,6 +76,7 @@ class PriceScraper(BaseScraper):
 
         fetched = 0
         rows_inserted = 0
+        empty_count = 0
 
         # Download ticker prices
         for i, row in enumerate(tickers):
@@ -80,7 +84,9 @@ class PriceScraper(BaseScraper):
                 break
 
             ticker = row["ticker"]
-            exchange = row["exchange"] or "US"
+            # EODHD EOD API uses broad exchange code "US" for all US-listed tickers,
+            # not the specific exchange (NYSE, NASDAQ, etc.) stored in securities
+            exchange = "US"
             ticker_key = f"{ticker}.{exchange}"
 
             if ticker_key in completed_set:
@@ -118,6 +124,8 @@ class PriceScraper(BaseScraper):
                     price_rows,
                 )
                 rows_inserted += len(price_rows)
+            else:
+                empty_count += 1
 
             completed_set.add(ticker_key)
             fetched += 1
@@ -130,7 +138,10 @@ class PriceScraper(BaseScraper):
                     "rows_inserted": rows_inserted,
                 })
                 self.conn.commit()
-                console.print(f"  [{fetched}/{total}] {rows_inserted} price rows")
+                console.print(
+                    f"  [{fetched}/{total}] {rows_inserted} price rows "
+                    f"({empty_count} empty)"
+                )
 
             time.sleep(_DELAY)
 
@@ -181,7 +192,8 @@ class PriceScraper(BaseScraper):
             self.complete_job(job_id)
             console.print(
                 f"[bold green]Price download complete.[/bold green] "
-                f"Tickers: {fetched}, Rows: {rows_inserted}"
+                f"Tickers: {fetched}, Rows: {rows_inserted}, "
+                f"Empty: {empty_count}"
             )
 
             # Run price audit as sub-step

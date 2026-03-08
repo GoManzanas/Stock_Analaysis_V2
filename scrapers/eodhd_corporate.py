@@ -87,7 +87,8 @@ class CorporateActionsScraper(BaseScraper):
                 break
 
             ticker = row["ticker"]
-            exchange = row["exchange"] or "US"
+            # EODHD API uses broad exchange code "US", not specific exchange (NYSE, NASDAQ, etc.)
+            exchange = "US"
 
             if ticker in completed_set:
                 continue

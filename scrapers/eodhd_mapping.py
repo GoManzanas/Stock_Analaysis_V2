@@ -337,7 +337,7 @@ class CusipResolver(BaseScraper):
             UPDATE securities
             SET
                 ticker = bm.code,
-                eodhd_symbol = bm.code || '.' || bm.exchange,
+                eodhd_symbol = bm.code || '.US',
                 name = COALESCE(bm.name, securities.name),
                 security_type = bm.type,
                 exchange = bm.exchange,
