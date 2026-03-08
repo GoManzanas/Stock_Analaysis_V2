@@ -60,6 +60,7 @@ class TestSchemaInit:
             "exchange_symbols",
             "filers",
             "filings",
+            "fund_metrics_cache",
             "holdings",
             "prices",
             "schema_version",

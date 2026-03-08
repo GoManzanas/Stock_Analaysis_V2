@@ -145,3 +145,22 @@ CREATE INDEX IF NOT EXISTS idx_scrape_jobs_type_target ON scrape_jobs(job_type, 
 CREATE INDEX IF NOT EXISTS idx_audit_results_type ON audit_results(audit_type);
 CREATE INDEX IF NOT EXISTS idx_exchange_symbols_cusip9 ON exchange_symbols(cusip9);
 CREATE INDEX IF NOT EXISTS idx_exchange_symbols_isin ON exchange_symbols(isin);
+
+-- Pre-computed fund metrics for fast screener queries
+CREATE TABLE IF NOT EXISTS fund_metrics_cache (
+    cik TEXT PRIMARY KEY REFERENCES filers(cik),
+    name TEXT,
+    annualized_return REAL,
+    sharpe_ratio REAL,
+    sp500_correlation REAL,
+    max_drawdown REAL,
+    hhi REAL,
+    top5_concentration REAL,
+    avg_turnover REAL,
+    quarters_active INTEGER,
+    latest_aum REAL,
+    avg_confidence REAL,
+    computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_fmc_return ON fund_metrics_cache(annualized_return);
+CREATE INDEX IF NOT EXISTS idx_fmc_aum ON fund_metrics_cache(latest_aum);
