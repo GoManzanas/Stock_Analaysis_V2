@@ -8,6 +8,7 @@ from pathlib import Path
 from config.settings import DB_PATH
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+VIEWS_PATH = Path(__file__).parent / "views.sql"
 SCHEMA_VERSION = 1
 
 
@@ -27,6 +28,9 @@ def init_db(db_path: Path | None = None) -> None:
     try:
         schema_sql = SCHEMA_PATH.read_text()
         conn.executescript(schema_sql)
+
+        views_sql = VIEWS_PATH.read_text()
+        conn.executescript(views_sql)
 
         # Record schema version if not present
         existing = conn.execute(

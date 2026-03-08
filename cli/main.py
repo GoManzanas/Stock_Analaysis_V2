@@ -304,5 +304,232 @@ def reset(confirm: bool):
     console.print("[green]Database recreated.[/green]")
 
 
+# --- Analytics commands ---
+
+@cli.group()
+def analytics():
+    """Analyze fund returns, metrics, and screening."""
+    pass
+
+
+@analytics.command("returns")
+@click.argument("cik")
+@click.option("--cumulative", is_flag=True, help="Show cumulative growth-of-$1 instead of quarterly returns")
+def analytics_returns(cik: str, cumulative: bool):
+    """Display quarterly returns for a fund."""
+    from analytics.returns import compute_quarterly_returns, compute_cumulative_returns
+
+    init_db()
+    conn = get_connection()
+    try:
+        quarterly = compute_quarterly_returns(conn, cik)
+        if not quarterly:
+            console.print(f"[yellow]No return data found for CIK {cik}.[/yellow]")
+            return
+
+        if cumulative:
+            data = compute_cumulative_returns(quarterly)
+            table = Table(title=f"Cumulative Returns — CIK {cik}")
+            table.add_column("Quarter", style="cyan")
+            table.add_column("Cumulative Value ($)", justify="right")
+            table.add_column("Return (%)", justify="right")
+            table.add_column("Confidence (%)", justify="right")
+
+            for row in data:
+                ret_pct = f"{row['quarterly_return'] * 100:+.2f}"
+                table.add_row(
+                    row["report_date"],
+                    f"${row['cumulative_value']:.4f}",
+                    ret_pct,
+                    f"{row['confidence'] * 100:.1f}",
+                )
+        else:
+            data = quarterly
+            table = Table(title=f"Quarterly Returns — CIK {cik}")
+            table.add_column("Quarter", style="cyan")
+            table.add_column("Return (%)", justify="right")
+            table.add_column("Confidence (%)", justify="right")
+            table.add_column("Position Count", justify="right")
+            table.add_column("Total Value", justify="right")
+
+            for row in data:
+                ret_pct = f"{row['quarterly_return'] * 100:+.2f}"
+                value_str = f"${row['total_value']:,.0f}" if row['total_value'] else "N/A"
+                table.add_row(
+                    row["report_date"],
+                    ret_pct,
+                    f"{row['confidence'] * 100:.1f}",
+                    str(row["position_count"]),
+                    value_str,
+                )
+
+        console.print(table)
+    finally:
+        conn.close()
+
+
+@analytics.command("metrics")
+@click.argument("cik")
+def analytics_metrics(cik: str):
+    """Display all screening metrics for a single fund."""
+    from analytics.screening import compute_fund_metrics
+
+    init_db()
+    conn = get_connection()
+    try:
+        metrics = compute_fund_metrics(conn, cik)
+
+        # Look up fund name
+        row = conn.execute(
+            "SELECT name FROM filers WHERE cik = ?", (cik,)
+        ).fetchone()
+        fund_name = row["name"] if row else f"CIK {cik}"
+
+        table = Table(title=f"Fund Metrics — {fund_name}")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", justify="right", style="green")
+
+        formatters = {
+            "annualized_return": ("Annualized Return", lambda v: f"{v * 100:.2f}%"),
+            "sharpe_ratio": ("Sharpe Ratio", lambda v: f"{v:.3f}"),
+            "sp500_correlation": ("S&P 500 Correlation", lambda v: f"{v:.3f}"),
+            "max_drawdown": ("Max Drawdown", lambda v: f"{v * 100:.2f}%"),
+            "hhi": ("HHI (Concentration)", lambda v: f"{v:.4f}"),
+            "top5_concentration": ("Top-5 Weight", lambda v: f"{v * 100:.1f}%"),
+            "avg_turnover": ("Avg Quarterly Turnover", lambda v: f"{v * 100:.1f}%"),
+            "quarters_active": ("Quarters Active", lambda v: str(int(v))),
+            "latest_aum": ("Latest AUM", lambda v: f"${v:,.0f}"),
+            "avg_confidence": ("Avg Confidence", lambda v: f"{v * 100:.1f}%"),
+        }
+
+        for key, (label, fmt) in formatters.items():
+            val = metrics.get(key)
+            table.add_row(label, fmt(val) if val is not None else "N/A")
+
+        console.print(table)
+    finally:
+        conn.close()
+
+
+@analytics.command("screen")
+@click.option("--min-return", type=float, default=None, help="Minimum annualized return (decimal, e.g. 0.10 for 10%)")
+@click.option("--max-correlation", type=float, default=None, help="Maximum S&P 500 correlation")
+@click.option("--min-quarters", type=int, default=4, help="Minimum quarters active (default: 4)")
+@click.option("--min-aum", type=float, default=None, help="Minimum latest AUM in dollars")
+@click.option("--min-sharpe", type=float, default=None, help="Minimum Sharpe ratio")
+@click.option("--max-drawdown", type=float, default=None, help="Maximum drawdown (negative number, e.g. -0.20)")
+@click.option("--min-confidence", type=float, default=0.8, help="Minimum average confidence (default: 0.8)")
+@click.option("--sort-by", type=str, default="annualized_return", help="Metric to sort by (default: annualized_return)")
+@click.option("--limit", type=int, default=25, help="Max results (default: 25)")
+def analytics_screen(min_return, max_correlation, min_quarters, min_aum, min_sharpe, max_drawdown, min_confidence, sort_by, limit):
+    """Screen funds by metric thresholds."""
+    from analytics.ranking import screen_funds
+    from rich.progress import Progress
+
+    init_db()
+    conn = get_connection()
+    try:
+        filters = {
+            "min_annualized_return": min_return,
+            "max_sp500_correlation": max_correlation,
+            "min_quarters_active": min_quarters,
+            "min_latest_aum": min_aum,
+            "min_sharpe_ratio": min_sharpe,
+            "max_max_drawdown": max_drawdown,
+            "min_avg_confidence": min_confidence,
+        }
+
+        with Progress(console=console) as progress:
+            task = progress.add_task("Screening funds...", total=None)
+            results = screen_funds(conn, filters=filters, sort_by=sort_by, limit=limit)
+            progress.update(task, completed=True)
+
+        if not results:
+            console.print("[yellow]No funds matched the screening criteria.[/yellow]")
+            return
+
+        table = Table(title="Fund Screening Results")
+        table.add_column("Rank", justify="right", style="dim")
+        table.add_column("Fund Name", style="cyan", max_width=40)
+        table.add_column("CIK", style="dim")
+        table.add_column("CAGR (%)", justify="right")
+        table.add_column("Sharpe", justify="right")
+        table.add_column("Correlation", justify="right")
+        table.add_column("Max DD (%)", justify="right")
+        table.add_column("Quarters", justify="right")
+        table.add_column("AUM", justify="right")
+
+        for i, fund in enumerate(results, 1):
+            table.add_row(
+                str(i),
+                fund.get("name", "Unknown"),
+                fund["cik"],
+                f"{fund['annualized_return'] * 100:.1f}" if fund.get("annualized_return") is not None else "N/A",
+                f"{fund['sharpe_ratio']:.2f}" if fund.get("sharpe_ratio") is not None else "N/A",
+                f"{fund['sp500_correlation']:.2f}" if fund.get("sp500_correlation") is not None else "N/A",
+                f"{fund['max_drawdown'] * 100:.1f}" if fund.get("max_drawdown") is not None else "N/A",
+                str(fund.get("quarters_active", "N/A")),
+                f"${fund['latest_aum']:,.0f}" if fund.get("latest_aum") is not None else "N/A",
+            )
+
+        console.print(table)
+    finally:
+        conn.close()
+
+
+@analytics.command("top")
+@click.option(
+    "--view",
+    type=click.Choice(["top_performers", "contrarian", "concentrated", "long_track_record"]),
+    default="top_performers",
+    help="Prebuilt screen view (default: top_performers)",
+)
+@click.option("--limit", type=int, default=25, help="Max results (default: 25)")
+def analytics_top(view: str, limit: int):
+    """Run prebuilt fund screens."""
+    from analytics.ranking import prebuilt_screen
+    from rich.progress import Progress
+
+    init_db()
+    conn = get_connection()
+    try:
+        with Progress(console=console) as progress:
+            task = progress.add_task(f"Running '{view}' screen...", total=None)
+            results = prebuilt_screen(conn, name=view, limit=limit)
+            progress.update(task, completed=True)
+
+        if not results:
+            console.print(f"[yellow]No funds matched the '{view}' screen.[/yellow]")
+            return
+
+        table = Table(title=f"Top Funds — {view.replace('_', ' ').title()}")
+        table.add_column("Rank", justify="right", style="dim")
+        table.add_column("Fund Name", style="cyan", max_width=40)
+        table.add_column("CIK", style="dim")
+        table.add_column("CAGR (%)", justify="right")
+        table.add_column("Sharpe", justify="right")
+        table.add_column("Correlation", justify="right")
+        table.add_column("Max DD (%)", justify="right")
+        table.add_column("Quarters", justify="right")
+        table.add_column("AUM", justify="right")
+
+        for i, fund in enumerate(results, 1):
+            table.add_row(
+                str(i),
+                fund.get("name", "Unknown"),
+                fund["cik"],
+                f"{fund['annualized_return'] * 100:.1f}" if fund.get("annualized_return") is not None else "N/A",
+                f"{fund['sharpe_ratio']:.2f}" if fund.get("sharpe_ratio") is not None else "N/A",
+                f"{fund['sp500_correlation']:.2f}" if fund.get("sp500_correlation") is not None else "N/A",
+                f"{fund['max_drawdown'] * 100:.1f}" if fund.get("max_drawdown") is not None else "N/A",
+                str(fund.get("quarters_active", "N/A")),
+                f"${fund['latest_aum']:,.0f}" if fund.get("latest_aum") is not None else "N/A",
+            )
+
+        console.print(table)
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()
