@@ -1,5 +1,49 @@
 # 13F Fund Analysis Tool — Implementation Plan
 
+## Progress Tracker
+
+| Phase | Status | Branch | Notes |
+|-------|--------|--------|-------|
+| **Phase 1**: Data Pipeline | **DONE** | `master` (merged via PR #1) | SEC bulk scraper, CUSIP resolver, price/corporate downloads, audit pipeline, CLI. 90 tests. |
+| **Phase 2A**: Analytics Engine | **DONE** | `slicezero/fund-analysis-phase2` (not yet merged) | Returns, screening metrics, ranking/filtering, CLI commands. 80 new tests (170 total). |
+| **Phase 2B**: API + React Frontend | **NEXT** | — | FastAPI backend + React frontend. See §2.4–2.6 below. |
+| **Phase 3**: Extensions | Not started | — | Insider trading, congressional trades, pre-2014 filings, technical patterns. |
+
+### What to do next (Phase 2B)
+
+1. **Merge Phase 2A** branch into master (PR or direct merge)
+2. **Plan Phase 2B**: API layer (FastAPI) + React frontend
+   - API endpoints: §2.4 below (funds, holdings, securities, prices, screener)
+   - Frontend pages: §2.5 below (Dashboard, Fund Explorer, Fund Detail, Filing View, Security View, Comparison)
+   - Dev workflow: §2.6 below
+3. Add `fastapi`, `uvicorn` to requirements.txt
+4. Scaffold `api/` and `frontend/` directories
+
+### Phase 2A implementation details (for reference)
+
+**Files created:**
+- `analytics/__init__.py`, `analytics/returns.py`, `analytics/screening.py`, `analytics/ranking.py`
+- `db/views.sql` (v_holding_values, v_portfolio_quarterly, v_benchmark_quarterly)
+- `tests/test_returns.py` (22 tests), `tests/test_screening.py` (30 tests), `tests/test_ranking.py` (28 tests)
+
+**Files modified:** `db/database.py` (loads views), `db/schema.sql` (new index), `config/settings.py` (analytics constants), `cli/main.py` (analytics commands)
+
+**Key decisions:**
+- SQL views (not materialized tables) for data freshness
+- Quarter-end snapshot diffing for return estimation
+- Hardcoded risk-free rate (4% annualized / 1% quarterly)
+- `statistics.correlation()` for Pearson r (Python 3.12+ stdlib)
+
+**CLI commands:**
+```bash
+python -m cli.main analytics returns <CIK>
+python -m cli.main analytics metrics <CIK>
+python -m cli.main analytics screen --min-return 0.15 --min-quarters 20
+python -m cli.main analytics top --view top_performers
+```
+
+---
+
 ## Scope & Scale
 
 **Universe**: All institutional investment managers who filed a 13F-HR for Q4 2025 (report period ending 12/31/2025, due by 2/14/2026). This is approximately **6,000–7,000 filers** per quarter, each with anywhere from 1 to 5,000+ holdings. Across all filers, the unique CUSIP universe is likely 8,000–12,000 distinct securities.
@@ -468,7 +512,7 @@ fund-analyst resume                   # Resume any interrupted job
 
 Phase 2 has two parallel tracks: the analytics computations (Python) and the UI (React + FastAPI). The analytics engine computes metrics and stores them in the DB; the frontend reads them.
 
-### 2.1 — Portfolio Return Estimation (`analytics/returns.py`)
+### 2.1 — Portfolio Return Estimation (`analytics/returns.py`) ✅ DONE
 
 - **Quarterly snapshot diffing**: Compare `shares × adj_close` at quarter end vs previous quarter
 - **Handle entries/exits**: New positions = assumed bought at quarter-end price (conservative); exited positions = assumed sold at quarter-end price
@@ -477,7 +521,7 @@ Phase 2 has two parallel tracks: the analytics computations (Python) and the UI 
 - **Caveat tracking**: Store confidence/completeness score per quarter (% of holdings with resolved prices)
 - **Output**: `fund_quarterly_returns` table with `(cik, report_date, quarterly_return, annualized_return_trailing, confidence_score)`
 
-### 2.2 — Fund Screening Metrics (`analytics/screening.py`)
+### 2.2 — Fund Screening Metrics (`analytics/screening.py`) ✅ DONE
 
 Precomputed into a `fund_metrics` materialized table, refreshed after each scrape:
 
@@ -490,7 +534,7 @@ Precomputed into a `fund_metrics` materialized table, refreshed after each scrap
 - **Max drawdown**: Worst peak-to-trough based on quarterly returns
 - **Sharpe ratio**: Using 3-month T-bill as risk-free rate
 
-### 2.3 — Fund Ranking & Filtering Engine (`analytics/ranking.py`)
+### 2.3 — Fund Ranking & Filtering Engine (`analytics/ranking.py`) ✅ DONE
 
 - SQL-based screener: `WHERE annualized_return > 0.15 AND sp500_correlation < 0.5 AND quarters_active >= 40`
 - Support composite scoring (weighted rank across multiple criteria)
