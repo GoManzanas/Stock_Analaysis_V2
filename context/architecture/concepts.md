@@ -4,57 +4,76 @@
 
 ```mermaid
 graph TB
-    subgraph "Browser"
-        CS[Content Script] --> BG[Background SW]
-        BG --> CS
-        PU[Popup UI] --> BG
-        BG --> ST[(chrome.storage.local)]
+    subgraph "Data Sources"
+        SEC[SEC Bulk 13F ZIPs]
+        EODHD[EODHD API]
     end
-    subgraph "Shared"
-        SH[Types & Messaging]
+    subgraph "Scrapers"
+        SB[sec_bulk.py] --> DB[(SQLite DB)]
+        EM[eodhd_mapping.py] --> DB
+        EP[eodhd_prices.py] --> DB
+        EC[eodhd_corporate.py] --> DB
     end
-    CS -.-> SH
-    BG -.-> SH
-    PU -.-> SH
+    subgraph "Audit"
+        HA[holdings_auditor.py] --> DB
+        PA[price_auditor.py] --> DB
+        RC[reconciler.py] --> DB
+    end
+    SEC --> SB
+    EODHD --> EM
+    EODHD --> EP
+    EODHD --> EC
+    DB --> HA
+    DB --> PA
+    DB --> RC
+    subgraph "Interface"
+        CLI[Click CLI + Rich]
+    end
+    CLI --> SB
+    CLI --> EM
+    CLI --> EP
+    CLI --> EC
+    CLI --> HA
+    CLI --> PA
+    CLI --> RC
 ```
-
-### 1. Background Service Worker (`src/background/`)
-- Central coordinator for the extension
-- Handles all messages from content scripts and popup
-- Manages persistent state via chrome.storage.local
-- No DOM access — runs in an isolated worker context
-- Terminates after ~30s of inactivity
-
-### 2. Content Script (`src/content/`)
-- Injected into web pages
-- Has access to the page DOM
-- Communicates with background via typed messages
-- Uses idempotency guard to prevent double initialization
-
-### 3. Popup (`src/popup/`)
-- React 19 SPA opened from the extension icon
-- Communicates with background via typed messages
-- Styled with Tailwind CSS v4
-
-### 4. Shared (`src/shared/`)
-- Type definitions (discriminated union messages)
-- Messaging helper functions
-- Constants and storage keys
-
-## Data Flow & State Management
-
-- **Source of truth**: `chrome.storage.local`
-- **No global state library** — popup uses `useState` + messaging to background
-- **Message protocol**: All inter-context communication uses typed messages via discriminated unions
 
 ## Key Domain Entities
 
 | Entity | Description |
 |--------|-------------|
-| *Define based on extension purpose* | |
+| Filer | An institutional investment manager (identified by CIK) |
+| Filing | A single 13F-HR or 13F-HR/A submission for a quarter |
+| Holding | One position within a filing (CUSIP + shares + value) |
+| Security | A resolved CUSIP → ticker mapping |
+| Corporate Action | Split, reverse split, symbol change, delisting |
+| Price | Daily OHLCV + adj_close for a ticker |
+
+## Data Flow
+
+1. **SEC Bulk Download**: Quarterly ZIP files → parse TSV → filers, filings, holdings tables
+2. **CUSIP Resolution**: Distinct CUSIPs from holdings → EODHD ID Mapping API → securities table
+3. **Price Download**: Resolved tickers → EODHD EOD API → prices table
+4. **Corporate Actions**: Resolved tickers → EODHD splits/dividends API → corporate_actions table
+5. **Audit**: Cross-validate holdings × prices, detect anomalies → audit_results table
 
 ## Storage Schema
 
-| Key | Type | Purpose |
-|-----|------|---------|
-| `settings` | object | Extension settings |
+| Table | Purpose |
+|-------|---------|
+| `filers` | Manager CIK, name, address |
+| `filings` | One row per 13F filing (CIK + quarter) |
+| `holdings` | Individual positions within filings |
+| `securities` | CUSIP → ticker mapping with confidence |
+| `prices` | Daily OHLCV + adj_close per ticker |
+| `benchmark_prices` | SPY/GSPC benchmark prices |
+| `corporate_actions` | Splits, symbol changes, delistings |
+| `scrape_jobs` | Job tracking for resumability |
+| `audit_results` | Findings from audit pipeline |
+
+## Critical Business Rules
+
+- **Value cutover (Jan 2023)**: Pre-2023 SEC values are in thousands; post-2023 in actual dollars
+- **Amendments**: RESTATEMENT replaces original holdings; NEW HOLDINGS appends
+- **Options**: Tracked with `put_call` flag, excluded from return calculations
+- **CUSIP formats**: SEC uses 9-digit, EODHD may expect 6-digit — try both

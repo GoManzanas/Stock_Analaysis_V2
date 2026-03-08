@@ -4,44 +4,31 @@ description: When writing tests or creating test files
 
 # Testing Strategy
 
-## Unit Tests (Vitest + jsdom)
+## Unit Tests (pytest)
 
 ### The Boundary Rule
 
-- Mock at the **Chrome messaging boundary** — `chrome.runtime.sendMessage`, `chrome.storage.local`, `chrome.tabs`
-- Never mock Chrome internals directly in component tests
+- Mock at the **external API boundary** — EODHD HTTP calls, SEC downloads
+- Mock at the **filesystem boundary** — ZIP file reads, file downloads
+- Use real SQLite databases (in-memory or `tmp_path`) for DB tests
 
 ### Pattern
 
-1. **Global Chrome mock** in `src/__tests__/mocks/chrome.ts` provides baseline mocking
-2. **Override in individual tests** when you need specific behavior:
-
-   ```typescript
-   vi.mocked(chrome.runtime.sendMessage).mockResolvedValue({ type: 'PONG', timestamp: 123 });
-   ```
-
-3. **Test the UI**: Verify rendering, interactions, and state changes
+1. Use `tmp_path` fixture for test databases
+2. Use `unittest.mock.patch` or `responses` library for HTTP mocking
+3. Create synthetic test data (small TSV files, mock API responses)
 
 ### What to Test
 
-- Message handler logic (background script switch cases)
-- Popup component rendering and interactions
-- Utility functions and data transformations
-- Content script initialization logic
+- Database schema creation and CRUD operations
+- Scrape job lifecycle (create, progress, complete, fail, resume)
+- SEC TSV parsing logic (value cutover, amendments, idempotency)
+- CUSIP resolution logic (6-digit vs 9-digit, confidence scoring)
+- Audit detection logic (anomaly detection, threshold checks)
+- CLI command invocation
 
 ### What NOT to Test
 
-- Chrome API internals (they're mocked)
-- Simple pass-through components
+- SQLite internals
+- Third-party library behavior (requests, click, rich)
 - Static configuration/constants
-- Third-party library behavior
-
-## Manual E2E Testing
-
-Load `dist/` as an unpacked extension in `chrome://extensions/` and test the full flow manually.
-
-## Important Notes
-
-- `jsdom` must be explicitly installed as a dev dependency (not bundled with Vitest)
-- Chrome mock is set up globally via `src/__tests__/setup.ts`
-- Use `vi.mocked()` for type-safe mock access
