@@ -44,3 +44,8 @@ SEC_CALLS_PER_SECOND = 8
 # --- Analytics ---
 RISK_FREE_RATE_QUARTERLY = 0.01  # ~4% annualized
 MIN_QUARTERS_FOR_METRICS = 4     # Minimum quarters to compute CAGR, Sharpe, etc.
+
+# --- API ---
+API_HOST = "127.0.0.1"
+API_PORT = 8000
+FRONTEND_DIST_DIR = PROJECT_ROOT / "frontend" / "dist"
