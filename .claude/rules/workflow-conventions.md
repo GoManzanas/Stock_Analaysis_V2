@@ -22,7 +22,7 @@ Project-specific conventions that guide how superpowers plugin skills behave in 
 
 ## Implementation
 
-- **Check `package.json` before suggesting new dependencies.** If a library is already installed, use it — don't ask the user whether to install it or propose alternatives.
+- **Check `requirements.txt` before suggesting new dependencies.** If a library is already installed, use it — don't ask the user whether to install it or propose alternatives.
 - Read relevant existing files before writing anything
 - Write tests alongside code, not after
 - Coverage target: ~80% of new code
