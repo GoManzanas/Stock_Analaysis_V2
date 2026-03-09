@@ -123,3 +123,42 @@ class PricePoint(BaseModel):
     close: float | None = None
     adj_close: float | None = None
     volume: int | None = None
+
+
+class SecurityHolderHistoryPoint(BaseModel):
+    report_date: str
+    quarter: str
+    holder_count: int
+    total_shares: float
+    total_value: float
+
+
+class SecuritySearchResult(BaseModel):
+    cusip: str
+    ticker: str | None = None
+    name: str | None = None
+    exchange: str | None = None
+
+
+class BenchmarkComparison(BaseModel):
+    date: str
+    ticker_close: float | None = None
+    ticker_adj_close: float | None = None
+    benchmark_close: float | None = None
+    benchmark_adj_close: float | None = None
+
+
+class PositionHistoryPoint(BaseModel):
+    report_date: str
+    quarter: str
+    shares: float | None = None
+    value: float | None = None
+    weight: float | None = None
+    price: float | None = None
+
+
+class ScreenerPreset(BaseModel):
+    name: str
+    description: str
+    filters: dict
+    sort_by: str

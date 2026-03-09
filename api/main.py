@@ -50,9 +50,17 @@ app.add_middleware(
 # --- Register API routers ---
 from api.routers.stats import router as stats_router  # noqa: E402
 from api.routers.funds import router as funds_router  # noqa: E402
+from api.routers.prices import router as prices_router  # noqa: E402
+from api.routers.holdings import router as holdings_router  # noqa: E402
+from api.routers.securities import router as securities_router  # noqa: E402
+from api.routers.screener import router as screener_router  # noqa: E402
 
 app.include_router(stats_router, prefix="/api")
 app.include_router(funds_router, prefix="/api")
+app.include_router(prices_router, prefix="/api")
+app.include_router(holdings_router, prefix="/api")
+app.include_router(securities_router, prefix="/api")
+app.include_router(screener_router, prefix="/api")
 
 # --- Static files + SPA catch-all ---
 if FRONTEND_DIST_DIR.exists():
