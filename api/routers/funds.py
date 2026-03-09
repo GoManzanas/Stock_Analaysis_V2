@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from analytics.returns import compute_cumulative_returns, compute_quarterly_returns
 from analytics.screening import compute_fund_metrics
 from api.deps import get_db
+from api.utils import quarter_to_date
 from api.models import (
+
     FilingItem,
     FundDetail,
     FundSummary,
@@ -41,18 +43,6 @@ _FILTER_MAP = {
     "min_hhi": ("hhi", ">="),
     "max_hhi": ("hhi", "<="),
 }
-
-
-def _quarter_to_date(q: str) -> str:
-    """Convert quarter string (e.g. '2024Q4') to report_date ('2024-12-31')."""
-    if len(q) < 5 or q[4] != "Q":
-        raise HTTPException(status_code=400, detail=f"Invalid quarter format: {q}. Use YYYYQN (e.g. 2024Q4)")
-    year = q[:4]
-    quarter = q[5:]
-    end_dates = {"1": "03-31", "2": "06-30", "3": "09-30", "4": "12-31"}
-    if quarter not in end_dates:
-        raise HTTPException(status_code=400, detail=f"Invalid quarter: {quarter}. Must be 1-4.")
-    return f"{year}-{end_dates[quarter]}"
 
 
 @router.get("/funds", response_model=PaginatedResponse[FundSummary])
@@ -189,7 +179,7 @@ def get_fund_holdings(
     _check_fund_exists(conn, cik)
 
     if quarter:
-        report_date = _quarter_to_date(quarter)
+        report_date = quarter_to_date(quarter)
     else:
         row = query_one(
             conn,
@@ -236,8 +226,8 @@ def get_holdings_diff(
 ):
     """Compare holdings between two quarters."""
     _check_fund_exists(conn, cik)
-    date1 = _quarter_to_date(q1)
-    date2 = _quarter_to_date(q2)
+    date1 = quarter_to_date(q1)
+    date2 = quarter_to_date(q2)
 
     def _get_holdings(report_date):
         rows = query_all(
